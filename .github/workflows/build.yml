@@ -15,35 +15,42 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip python2 python3
 
       - name: Setup Compiler & AnyKernel3
         run: |
-          mkdir -p out
-          git clone --depth=1 https://github.com/rama982/clang out/clang-llvm
-          git clone --depth=1 https://github.com/rama982/AnyKernel3 out/AnyKernel
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang-llvm
+          git clone --depth=1 --no-single-branch https://github.com/NetErnels/AnyKernel3.git -b lancelot AnyKernel3
+          git clone https://android.googlesource.com/platform/system/libufdt scripts/ufdt/libufdt
 
       - name: Compile Kernel (Lancelot + Huaxing)
         run: |
-          export PATH="$(pwd)/out/clang-llvm/bin:${PATH}"
+          export PATH="$(pwd)/clang-llvm/bin:${PATH}"
           make O=out ARCH=arm64 xiaomi_defconfig xiaomi/lancelot.config
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            LD=ld.lld \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy
+            AR=llvm-ar \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip 2>&1 | tee build.log
 
       - name: Package AnyKernel3 Zip
         run: |
-          cp out/arch/arm64/boot/Image.gz-dtb out/AnyKernel/
-          cd out/AnyKernel
-          zip -r9 NetHunter-Lancelot-Huaxing-Fixed.zip ./*
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cd AnyKernel3
+          zip -r9 NetHunter-Lancelot-Huaxing-Fixed.zip ./* -x ".git*" -x "README.md" -x "*.zip"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: NetHunter-Lancelot-Huaxing-Kernel
-          path: out/AnyKernel/NetHunter-Lancelot-Huaxing-Fixed.zip
+          path: AnyKernel3/NetHunter-Lancelot-Huaxing-Fixed.zip
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
