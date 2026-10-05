@@ -1,0 +1,49 @@
+name: Build NetHunter Kernel Lancelot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          ref: genom-release
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip
+
+      - name: Setup Compiler & AnyKernel3
+        run: |
+          mkdir -p out
+          git clone --depth=1 https://github.com/rama982/clang out/clang-llvm
+          git clone --depth=1 https://github.com/rama982/AnyKernel3 out/AnyKernel
+
+      - name: Compile Kernel (Lancelot + Huaxing)
+        run: |
+          export PATH="$(pwd)/out/clang-llvm/bin:${PATH}"
+          make O=out ARCH=arm64 xiaomi_defconfig xiaomi/lancelot.config
+          make -j$(nproc --all) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            LD=ld.lld \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy
+
+      - name: Package AnyKernel3 Zip
+        run: |
+          cp out/arch/arm64/boot/Image.gz-dtb out/AnyKernel/
+          cd out/AnyKernel
+          zip -r9 NetHunter-Lancelot-Huaxing-Fixed.zip ./*
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetHunter-Lancelot-Huaxing-Kernel
+          path: out/AnyKernel/NetHunter-Lancelot-Huaxing-Fixed.zip
